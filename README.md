@@ -1,26 +1,50 @@
-# Candidate kit
+# HROne Employee Attendance & Analytics API
 
-Read in this order:
+FastAPI and MongoDB implementation of the HROne attendance assignment. The HTTP contract and business rules are in [openapi.yaml](openapi.yaml); storage shapes are in [DATA_MODEL.md](DATA_MODEL.md). All application code is in `app/main.py`.
 
-1. `PROBLEM_STATEMENT.docx`: what you are asked to do, how it is evaluated.
-2. `openapi.yaml`: the API contract and the business rules (R1 - R10).
-3. `DATA_MODEL.md`: what is stored in MongoDB, with nine sample documents.
-4. `app/main.py`: the starter. Put **all** your code in this one file. It must start with `uvicorn app.main:app --port 8000`.
-5. `REVIEW.md`, `DECISIONS.md`: templates to fill in.
+## Requirements
 
-`sample_data/` holds the nine sample documents as MongoDB Extended JSON; `sample_seed.py` loads them. The grader's dataset is
-much larger and contains cases they do not show.
+- Python 3.11 or newer
+- A reachable MongoDB instance (MongoDB 6.0 or newer; the assignment grader uses MongoDB 7)
+- `MONGO_URI` and `MONGO_DB` set in the process environment
 
-## Local setup
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env            # set MONGO_URI / MONGO_DB (local docker: docker run -p 27017:27017 mongo:7)
-python sample_seed.py
-uvicorn app.main:app --port 8000 --reload
+## Install and run
+
+From a clean checkout, install the declared dependencies and set the MongoDB connection settings before launching the API:
+
+```sh
+python -m pip install -r requirements.txt
+export MONGO_URI="mongodb://localhost:27017"
+export MONGO_DB="attendance_db"
+uvicorn app.main:app --port 8000
 ```
-MongoDB **6.0 or newer** is required (the grader uses 7.0). MongoDB Atlas free tier (M0) works.
 
-## Submit
-A public Git repository with `app/main.py`, `requirements.txt`, `REVIEW.md`, `DECISIONS.md` and a short `README.md`.
-No `.env`, no secrets, no Dockerfile.
+In PowerShell, set the same variables with `$env:MONGO_URI = "mongodb://localhost:27017"` and `$env:MONGO_DB = "attendance_db"` before running the `uvicorn` command. Replace the example URI and database name with values for your MongoDB instance. The app also loads a local `.env` file when present; keep credentials out of source control.
+
+On startup, the app creates its required MongoDB indexes idempotently, including unique indexes for employee codes and employee attendance dates. Sample data is optional; load it with `python sample_seed.py`. The seeder inserts only missing sample records and preserves existing documents.
+
+Interactive API documentation is available at `http://127.0.0.1:8000/docs`; the OpenAPI document is at `http://127.0.0.1:8000/openapi.json`. The readiness endpoint is `/health`. Explain plans are available at `/admin/explain/{endpoint}` for the five endpoint names in the OpenAPI contract.
+
+## Run tests
+
+```sh
+python -m pytest -q
+```
+
+Most API tests replace `MongoClient` before importing the application and use an in-memory MongoDB test double. `tests/test_mongodb_integration.py` additionally starts a local `mongod` on loopback with a new temporary data directory and unique database per test. It never reads the configured `MONGO_URI` or `MONGO_DB`, and drops only its own test databases. Set `MONGOD_PATH` if `mongod` is not available on `PATH` or the default Windows MongoDB location.
+
+## Assignment files
+
+- `openapi.yaml` - endpoints, response schemas and rules R1-R10
+- `DATA_MODEL.md` - MongoDB document shapes and sample records
+- `sample_data/` and `sample_seed.py` - Extended JSON examples and non-destructive sample loading
+- `REVIEW.md` - starter defects found and their fixes
+- `DECISIONS.md` - index, concurrency, tie, headcount and scaling decisions
+- `REQUIREMENTS_AUDIT.md` - requirement checklist, verification evidence and remaining gaps
+
+No database reset is performed by the API or sample seeder.
+
+## Known limitations
+
+- Performance timings in the audit are local smoke measurements, not a production benchmark or latency guarantee. At 100,000 attendance records, only the attendance-list Explain plan was checked at that scale; the other four Explain branches were checked on smaller isolated datasets.
+- Integration tests require a local `mongod` binary and have been verified with MongoDB 8.0.12 in this workspace. Set `MONGOD_PATH` when the binary is not on `PATH` or at the default Windows location. MongoDB 7 compatibility was not independently verified here.

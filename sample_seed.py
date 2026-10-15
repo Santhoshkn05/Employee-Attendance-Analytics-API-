@@ -1,10 +1,6 @@
 """Loads the nine sample documents from sample_data/ (see DATA_MODEL.md) into your database.
 Usage:  python sample_seed.py            (reads MONGO_URI / MONGO_DB from the environment or .env)
 
-Equivalent with the MongoDB tools:
-  mongoimport --uri "$MONGO_URI" --db "$MONGO_DB" -c employees       --jsonArray --drop --file sample_data/employees.json
-  mongoimport --uri "$MONGO_URI" --db "$MONGO_DB" -c attendance_logs --jsonArray --drop --file sample_data/attendance_logs.json
-
 The samples show document SHAPES only. The grader uses a much larger hidden dataset with cases they do not show.
 Passing on this sample does not mean your analytics are correct - re-read the business rules."""
 import os
@@ -21,6 +17,15 @@ db = MongoClient(os.getenv("MONGO_URI", "mongodb://localhost:27017"), tz_aware=T
 
 for name in ("employees", "attendance_logs"):
     docs = json_util.loads((here / f"{name}.json").read_text(), json_options=opts)
-    db[name].delete_many({})
-    db[name].insert_many(docs)
-    print(f"loaded {len(docs):>2} documents into '{db.name}.{name}'")
+    if name == "employees":
+        key = "emp_code"
+    else:
+        key = ("emp_code", "date")
+    from pymongo import UpdateOne
+    operations = []
+    for doc in docs:
+        identity = {field: doc[field] for field in ((key,) if isinstance(key, str) else key)}
+        operations.append(UpdateOne(identity, {"$setOnInsert": doc}, upsert=True))
+    if operations:
+        result = db[name].bulk_write(operations, ordered=False)
+        print(f"seeded {len(docs):>2} sample documents into '{db.name}.{name}' ({result.upserted_count} inserted; existing data preserved)")

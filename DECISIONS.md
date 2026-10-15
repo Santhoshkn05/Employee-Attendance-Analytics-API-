@@ -1,7 +1,7 @@
-# DECISIONS.md  (about 150-200 words in total - plain language, your own words)
+# Decisions
 
-1. **Indexes.** Which indexes did you create, and which query or guarantee does each one serve? Which one did you consider and reject?
-2. **Punch-in race.** Two identical punch-in requests arrive at the same instant. Walk through exactly what happens in your code.
-3. **Ties.** Two employees are tied on late minutes at the cutoff of `limit`. What does your leaderboard return, and why?
-4. **Headcount.** How does your department summary make sure employees with zero logs are counted?
-5. **One thing you would change** if this had to serve 100x the data.
+1. **Indexes.** Unique `employees.emp_code` enforces the business identifier. Unique `(emp_code, date)` prevents duplicate daily punches and supports employee month queries. `(date desc, emp_code asc)` supports attendance sorting; `(date, late_minutes, emp_code)` supports monthly late scans. `(department, joined_on)` and `joined_on` support department headcount queries. I rejected a standalone status index because status has few values and cannot provide the required date ordering.
+2. **Punch-in race.** Both requests can pass the initial existence check. Both insert; the unique `(emp_code, date)` index accepts one. The other receives `DuplicateKeyError`, translated to HTTP 409.
+3. **Ties.** `$rank` gives tied employees the same rank and skips the next rank. Filtering by `rank <= limit` returns every tied employee at the cutoff; rows then sort by minutes descending and code ascending.
+4. **Headcount.** Summary starts from employees joined by month end, then looks up attendance. Employees with no logs remain in the aggregation and count; later joiners are filtered out.
+5. **100k smoke performance.** A disposable MongoDB 8.0.12 test inserted 100,000 attendance records in 2.201s. On this workspace, paginated attendance listing took 0.028s, employee-monthly 0.007s, department summary 0.020s, and a 30-day department trend 0.028s. These are local smoke measurements, not an SLA or representative production benchmark; attendance-list Explain used IXSCAN with no reported COLLSCAN. Source attendance records remain authoritative.

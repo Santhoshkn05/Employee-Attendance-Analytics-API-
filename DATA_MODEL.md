@@ -8,7 +8,18 @@ described here, and what your code writes must look the same. The HTTP contract 
 |---|---|
 | Database | the name in `MONGO_DB` |
 | Collections | `employees`, `attendance_logs` |
-| Indexes | **None** except the default `_id` index. Creating the ones you need, at startup, is your job. |
+| Indexes | The seeded database may have only `_id`; the API creates its required indexes idempotently at startup. See below. |
+
+## Indexes created by the API
+
+- `employees.emp_code` unique: enforces the customer business identifier.
+- `employees.department, joined_on`: supports department filtering and eligible headcount periods.
+- `employees.joined_on`: supports headcount-period scans when no department filter is supplied.
+- `attendance_logs.emp_code, date` unique: enforces one record per employee/day and supports monthly employee queries.
+- `attendance_logs.date desc, emp_code asc`: supports attendance date filtering and response sort order.
+- `attendance_logs.date, late_minutes, emp_code`: supports monthly late-record scans and leaderboard aggregation.
+
+Indexes use MongoDB key-derived names and are created idempotently at application startup. This also agrees with the key-derived indexes already created by the starter.
 
 ## 1. Types at a glance
 
@@ -118,8 +129,8 @@ are epoch milliseconds. This is easy to forget because the dates sit inside a ne
 
 ## 5. Sample documents
 
-The files in `sample_data/` hold these documents as MongoDB Extended JSON, so you can load them with
-`python sample_seed.py` or `mongoimport --jsonArray` (`_id` is omitted; MongoDB generates it).
+The files in `sample_data/` hold these documents as MongoDB Extended JSON. Load them with
+`python sample_seed.py`, which inserts only missing documents by the employee code or attendance natural key and preserves existing records.
 
 **They show the shapes only.** The grader's dataset is much larger and contains cases that these nine do not (ties, weekend
 records, employees with no logs at all, people who join mid-month, and more). Passing on this sample proves nothing about
